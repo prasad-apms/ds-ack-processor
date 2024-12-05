@@ -5,6 +5,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.connector.kafka.source.KafkaSource;
+import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.slf4j.LoggerFactory;
 import java.io.FileReader;
 import org.slf4j.Logger;
@@ -108,8 +109,8 @@ public class App {
             .setTopics(MACHINE_INSTANCE)
             .setGroupId(KAFKA_GROUP_ID)
             .setProperties(kafkaConsumerProperties(properties,appName))
-            //.setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
-            .setStartingOffsets(OffsetsInitializer.latest())
+            .setStartingOffsets(OffsetsInitializer.committedOffsets(OffsetResetStrategy.EARLIEST))
+            //.setStartingOffsets(OffsetsInitializer.latest())
             .setDeserializer(new MessageDeserialization())
             .build();
 
