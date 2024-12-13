@@ -24,6 +24,7 @@ public class Message {
     private long timestamp;
     private String timestampType;
     private Timestamp shiftTerminalTime;
+    private String duration;
 
 
     // Message license information
