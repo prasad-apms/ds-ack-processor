@@ -1,4 +1,4 @@
-package org.flink;
+package org.flink.models;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAlias;
@@ -24,6 +24,7 @@ public class Message {
     private long timestamp;
     private String timestampType;
     private Timestamp shiftTerminalTime;
+    private String duration;
 
 
     // Message license information

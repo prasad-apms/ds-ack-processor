@@ -1,9 +1,11 @@
-package org.flink;
+package org.flink.utils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.connector.kafka.source.reader.deserializer.KafkaRecordDeserializationSchema;
 import org.apache.flink.util.Collector;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.flink.models.Message;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 

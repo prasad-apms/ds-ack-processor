@@ -4,7 +4,7 @@
   <groupId>org.flink</groupId>
   <artifactId>ds-ack-processor</artifactId>
   <name>ds-ack-processor</name>
-  <version>v.0.0.1</version>
+  <version>v.0.0.4</version>
   <url>http://maven.apache.org</url>
   <build>
     <plugins>
@@ -44,7 +44,7 @@
               </filters>
               <transformers>
                 <transformer>
-                  <mainClass>org.flink.App</mainClass>
+                  <mainClass>org.flink.DsAckToLogJob</mainClass>
                 </transformer>
                 <transformer />
               </transformers>
