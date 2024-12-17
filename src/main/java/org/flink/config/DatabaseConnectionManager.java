@@ -1,4 +1,4 @@
-package org.flink;
+package org.flink.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;

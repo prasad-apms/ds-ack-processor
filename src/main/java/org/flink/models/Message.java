@@ -1,4 +1,4 @@
-package org.flink;
+package org.flink.models;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAlias;
