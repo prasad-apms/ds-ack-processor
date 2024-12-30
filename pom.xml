@@ -3,7 +3,7 @@
 
     <groupId>org.flink</groupId>
     <artifactId>ds-ack-processor</artifactId>
-    <version>v.0.0.4</version>
+    <version>v.0.0.5</version>
     <packaging>jar</packaging>
 
     <name>ds-ack-processor</name>

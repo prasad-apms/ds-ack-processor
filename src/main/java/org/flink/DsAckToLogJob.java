@@ -61,6 +61,33 @@ public class DsAckToLogJob {
         return kafkaProps;
     }
 
+    
+    private static final Properties loadKafkaSinkProperties(Properties prop,String appName) {
+        Properties kafkaSinkProps = new Properties();
+        kafkaSinkProps.setProperty("bootstrap.servers", prop.getProperty("SINK_BROKERS"));
+        kafkaSinkProps.setProperty("security.protocol", prop.getProperty("SECURITY_PROTOCOL"));
+        kafkaSinkProps.setProperty("sasl.mechanism", prop.getProperty("SASL_MECHANISM"));
+        kafkaSinkProps.setProperty("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        kafkaSinkProps.setProperty("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        kafkaSinkProps.setProperty("kafkaProducerTopic", prop.getProperty("KAFKA_TOPIC_PRODUCER"));
+
+        kafkaSinkProps.setProperty("sasl.jaas.config", 
+            String.format("org.apache.kafka.common.security.plain.PlainLoginModule required username='%s' password='%s';",
+            prop.getProperty("SINK_KAFKA_USERNAME"),
+            prop.getProperty("SINK_KAFKA_PASSWORD")
+        ));
+
+        // Configure the path of truststore if client authentication is required
+        kafkaSinkProps.setProperty("ssl.truststore.location", prop.getProperty("SSL_TRUSTSTORE_LOCATION"));
+        kafkaSinkProps.setProperty("ssl.truststore.password", prop.getProperty("SSL_TRUSTSTORE_PASSWORD"));
+
+        // Configure the path of keystore (private key) if client authentication is
+        kafkaSinkProps.setProperty("ssl.keystore.location", prop.getProperty("SSL_KEYSTORE_LOCATION"));
+        kafkaSinkProps.setProperty("ssl.keystore.password", prop.getProperty("SSL_KEYSTORE_PASSWORD"));
+        return kafkaSinkProps;
+    }
+
+
     /**
      * Main method to set up Flink environment and execute the job.
      * Created a new Flink environment with Kafka consumer (data source) (data pipeline for update the acknowledge the sync log) .
@@ -125,14 +152,18 @@ public class DsAckToLogJob {
         DataStream<Message> messageStream  = environment.fromSource(source, WatermarkStrategy.noWatermarks(), "ackKafka");
 
         // Keyed Streaming, based on key process the machine state.
+     
         DataStream<Message> keyedStream = messageStream 
             .keyBy(Message::getReqId)
             .process(new DsAckStream(properties)) 
             .name("Keyed Stream of acknowledgment");
        
+        
+        // ********************** Establish the Kafka sink ***********************//
+        Properties kSinkProps = loadKafkaSinkProperties(properties,appName);
 
         // Add the custom sink
-        keyedStream.addSink(new SyncAckToDb(properties));
+        keyedStream.addSink(new SyncAckToDb(properties, kSinkProps));
 
         logger.info("Started Successfully : JOB NAME : {}",jobName);
         

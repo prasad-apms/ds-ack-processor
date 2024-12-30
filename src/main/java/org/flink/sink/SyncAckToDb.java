@@ -2,11 +2,16 @@ package org.flink.sink;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.flink.config.DatabaseConnectionManager;
 import org.flink.models.Message;
+import org.flink.models.SinkData;
 import org.flink.utils.Helper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.sql.*;
 import java.util.Properties;
@@ -14,21 +19,31 @@ public class SyncAckToDb extends RichSinkFunction<Message> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SyncAckToDb.class);
 
+    private transient KafkaProducer<String, String> kafkaProducer;
+    private static final String HEALTH_NOTIFY_PAYLOAD_KEY = "isLockAck";
+
     private static final String LOG_ACK_UPDATE_QUERY = "UPDATE dw.log_mc_ed_sync SET status = 1, duration = ?::interval WHERE sync_id = ?";
-    private static final String IS_LOCK_UPDATE_QUERY = "UPDATE mc_machines SET is_lock = ? WHERE machine_id = ?";
+    //private static final String IS_LOCK_UPDATE_QUERY = "UPDATE mc_machines SET is_lock = ? WHERE machine_id = ?";
     private static final String FETCH_REQ_LOG_DATA_QUERY = "SELECT trigger_type AS reqType, trigger_ref AS tRef, machine_id AS mcId, cdt AS startTime, udt AS endTime " +
             "FROM dw.log_mc_ed_sync WHERE sync_id = ? LIMIT 1";
 
     private transient Connection db1Connection;
     private transient PreparedStatement db1UpdateStatement;
 
-    private transient Connection db2Connection;
-    private transient PreparedStatement db2UpdateStatement;
+    // private transient Connection db2Connection;
+    // private transient PreparedStatement db2UpdateStatement;
 
     private final Properties properties;
+    private final Properties kSinkProps;
 
-    public SyncAckToDb(Properties properties) {
+    private transient SinkData sinkData;
+    private final String kafkaSinkTopic;
+
+
+    public SyncAckToDb(Properties properties , Properties kSinkProperties) {
         this.properties = properties;
+        this.kSinkProps = kSinkProperties;
+        this.kafkaSinkTopic = properties.getProperty("KAFKA_TOPIC_PRODUCER");
     }
 
     @Override
@@ -37,28 +52,52 @@ public class SyncAckToDb extends RichSinkFunction<Message> {
 
         // Load database drivers
         Class.forName("org.postgresql.Driver");
-        Class.forName("com.mysql.cj.jdbc.Driver");
+        // Class.forName("com.mysql.cj.jdbc.Driver");
 
         // Initialize connections using a connection manager
         DatabaseConnectionManager.initialize(properties);
 
         // Get the shared connection.
         db1Connection = DatabaseConnectionManager.getDB1Connection();
-        db2Connection = DatabaseConnectionManager.getDB2Connection();
 
         // Prepare statements
         db1UpdateStatement = db1Connection.prepareStatement(LOG_ACK_UPDATE_QUERY);
-        db2UpdateStatement = db2Connection.prepareStatement(IS_LOCK_UPDATE_QUERY);
+        // db2UpdateStatement = db2Connection.prepareStatement(IS_LOCK_UPDATE_QUERY);
 
         // Disable auto-commit for transactional safety
         db1Connection.setAutoCommit(false);
-        db2Connection.setAutoCommit(false);
+        // db2Connection.setAutoCommit(false);
+
+         // sinkData object
+         sinkData = new SinkData();
+
+        // kafka producer connection open
+        kafkaProducer = new KafkaProducer<>(kSinkProps);
     }
 
 
+     /**
+     * Send isLock acknowledgment to the dataSink kafka topic..
+     * @param message
+     * @param 
+     * @param payloadKey
+     */
+    private void sendDeviceSyncNotify(String terminalTime,int isLock,int mcId, String logMessage){
+    
+        try {
+            sinkData.populateFromMessage(terminalTime,isLock,mcId, HEALTH_NOTIFY_PAYLOAD_KEY);
+            LOG.info("data-Sink-isLockData {} ", sinkData.toJsonString());
+            kafkaProducer.send(new ProducerRecord<>(kafkaSinkTopic, sinkData.toJsonString()));
+            LOG.info("--- sink isLock Ack success ----");
+        } catch (JsonProcessingException e) {
+            LOG.error("Error processing JSON for notification: {}", mcId, e);
+        }
+        
+    }
 
     @Override
-    public void invoke(Message event, Context context) {
+    public void invoke(Message event, Context context) throws Exception {
+        
         if (event == null) {
             LOG.warn("Received null event, skipping processing.");
             return;
@@ -115,34 +154,42 @@ public class SyncAckToDb extends RichSinkFunction<Message> {
 
         // Handle isLock update if applicable
         if (reqType == Integer.parseInt(properties.getProperty("isLock.request.type"))) {
-            updateIsLock(mcId, triggerReference);
+            sendDeviceSyncNotify(String.valueOf(endTime),triggerReference, mcId, "isLockAck");
         } else {
             LOG.info("Request type {} does not require isLock update.", reqType);
         }
     }
 
-    private void updateIsLock(int machineId, int lockStatus) throws SQLException {
-        db2UpdateStatement.setInt(1, lockStatus);
-        db2UpdateStatement.setInt(2, machineId);
+    // private void updateIsLock(int machineId, int lockStatus) throws SQLException {
+    //     db2UpdateStatement.setInt(1, lockStatus);
+    //     db2UpdateStatement.setInt(2, machineId);
 
-        try {
-            db2UpdateStatement.executeUpdate();
-            db2Connection.commit();
-            LOG.info("Updated isLock status for machineId: {}", machineId);
-        } catch (SQLException e) {
-            db2Connection.rollback();
-            LOG.error("Error updating isLock status for machineId {}: {}", machineId, e.getMessage(), e);
-        }
-    }
+    //     try {
+    //         db2UpdateStatement.executeUpdate();
+    //         db2Connection.commit();
+    //         LOG.info("Updated isLock status for machineId: {}", machineId);
+    //     } catch (SQLException e) {
+    //         db2Connection.rollback();
+    //         LOG.error("Error updating isLock status for machineId {}: {}", machineId, e.getMessage(), e);
+    //     }
+    // }
 
 
     @Override
     public void close() throws Exception {
-        closeResource(db1UpdateStatement);
-        closeResource(db1Connection);
-        closeResource(db2UpdateStatement);
-        closeResource(db2Connection);
         super.close();
+        DatabaseConnectionManager.close();
+        // closeResource(db1Connection);
+        // closeResource(db2UpdateStatement);
+        closeResource(db1UpdateStatement);
+        // closeResource(db2Connection);
+
+        
+        if (kafkaProducer != null) {
+            kafkaProducer.flush();
+            kafkaProducer.close();
+        }
+        
     }
 
 

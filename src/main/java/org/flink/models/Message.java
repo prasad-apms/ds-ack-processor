@@ -26,6 +26,9 @@ public class Message {
     private Timestamp shiftTerminalTime;
     private String duration;
 
+    private String terminalTime;
+    private String isLock;
+    private String machineId;
 
     // Message license information
     @JsonAlias("structure_id")
@@ -43,6 +46,8 @@ public class Message {
     
     @JsonAlias({"req_id","reqId"})
     private String reqId;
+
+
 
 
 
